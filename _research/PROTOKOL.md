@@ -1,0 +1,270 @@
+# PROTOKOL HUAWEI MUT - kompletna dokumentacja byte-by-byte
+
+> Reverse-engineered z `HuaweiMUT.exe` (389120 bytes, MFC VC6, build 2008-05-15).
+> Plus internet research: blog.hqcodeshop.fi (Jari Turkia, E5186), 4PDA, XDA, openwrt forum.
+
+## 1. Network layer
+
+| Parametr | Wartosc | Notatki |
+|---|---|---|
+| Protocol | UDP | Brak fallback (no TCP/HTTP/TFTP) |
+| Multicast IP | `224.0.0.119` | Hardcoded w MUT.exe @ 0x46xxxx |
+| Port (dest) | `13456` (0x3490) | Hardcoded |
+| Port (source) | `13456` (0x3490) | **Bind do TEGO SAMEGO portu** |
+| TTL multicast | `0` | Local segment only (`IP_MULTICAST_TTL=0`) |
+| Loopback | `1` | `IP_MULTICAST_LOOP=1` (sluszy siebie) |
+| Membership | `IP_ADD_MEMBERSHIP` na `224.0.0.119` z PC IF |
+| Interface | `IP_MULTICAST_IF` = PC IP karty (z GetAdaptersInfo) |
+| Broadcast | `SO_BROADCAST=1` | Wlaczone |
+| ReuseAddr | `SO_REUSEADDR=1` | Wlaczone (multiple instances) |
+
+## 2. Packet structure (1086 bytes total)
+
+```
++--------+-----+--------------------------------+
+| Offset | Len | Field                          |
++--------+-----+--------------------------------+
+| 0      | 4   | control_word (LE uint32)       |
+| 4      | 4   | chunk_counter (LE uint32)      |
+| 8      | 4   | chunk_crc32 (LE uint32)        |
+| 12     | 4   | total_file_size (LE uint32)    |
+| 16     | 4   | firmware_crc32 (LE uint32)     |
+| 20     | 20  | PACKAGE_ID (ASCII, null-pad)   |
+| 40     | 2   | unknown_word (z byte_46568E)   |
+| 42     | 20  | PRODUCT_ID (ASCII, null-pad)   |
+| 62     | 1024| chunk_data (null-padded)       |
++--------+-----+--------------------------------+
+```
+
+## 3. control_word (offset 0-3)
+
+```
+control_word = (opcode << 29) | 0x00000400
+```
+
+| Opcode | Meaning | control_word LE | Hex bytes |
+|---|---|---|---|
+| 1 = DATA | Zwykly chunk firmware (1024 bytes) | `0x20000400` | `00 04 00 20` |
+| 2 = LAST | Ostatni chunk (< 1024 bytes, padded zerami) | `0x40000400` | `00 04 00 40` |
+| 4 = INIT | Init packet (partition table) | `0x80000400` | `00 04 00 80` |
+
+> **Uwaga**: bits 29-31 = opcode (3 bity = 8 mozliwych wartosci).
+> Tylko 1, 2, 4 sa znane. Bits 0-28 = `0x00000400` (sztywne).
+
+## 4. INIT packet (opcode 4)
+
+INIT packet wysylany **PIERWSZY** w kazdej rundzie. Zawiera **partition table** w polu chunk_data.
+
+```c
+struct partition_entry {  // 32 bytes per partition
+    char     name[20];      // ASCII null-padded ("CFE", "kernelfs", ...)
+    uint32_t start_addr;    // LE
+    uint32_t end_addr;      // LE
+    uint8_t  flag;          // 0x02 = cover, 0x01 = uncover
+    uint8_t  padding[3];    // zera
+};
+```
+
+Ile partycji: zalezy od INI (`PARTITIONS=name,start-end,cover|name,start-end,cover`).
+
+Typowy INIT dla WS7200 (2 partycje):
+```
+0x00-0x13: "CFE\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"  (20 bytes)
+0x14-0x17: 00 00 00 00                              (start=0)
+0x18-0x1B: FF FF 00 00                              (end=0xFFFF)
+0x1C:      02                                       (cover)
+0x1D-0x1F: 00 00 00                                 (padding)
+
+0x20-0x33: "kernelfs\0\0\0\0\0\0\0\0\0\0\0\0"       (20 bytes)
+0x34-0x37: 00 00 01 00                              (start=0x10000)
+0x38-0x3B: FF FF 3F 00                              (end=0x3FFFFF)
+0x3C:      02                                       (cover)
+0x3D-0x3F: 00 00 00                                 (padding)
+```
+
+## 5. DATA packet (opcode 1)
+
+Zwykly chunk - 1024 bajtow firmware'u, kopia z file offset = `chunk_counter * 1024`.
+
+`chunk_crc32` = CRC32(chunk_data) - zlib compatible.
+
+## 6. LAST packet (opcode 2)
+
+Identycznie jak DATA, ALE jezeli ostatni chunk jest < 1024 bajtow, jest **null-padded** do 1024.
+`chunk_crc32` liczone na PADDED chunk (z zerami).
+
+## 7. PACKAGE_ID i PRODUCT_ID
+
+Z INI file. ASCII string, null-padded do 20 bajtow.
+Jezeli string krotszy niz 20 - wszystko po nim = `\x00`.
+
+Typowe wartosci:
+- `fnt-HGW` (WS7200, AX3 Pro, Honor R3, WS7100)
+- inne dla innych modeli (np. `mbb-CPE` dla E5186)
+
+## 8. unknown_word @ offset 40-41
+
+W IDA widoczne jako `byte_46568E[4166]`. Tablica bajtow w `.data` segmencie.
+**Wartosci**: 2 bajty, najczesciej `00 00` lub niskie liczby.
+Niezbadane do konca - prawdopodobnie reserved/version field.
+
+## 9. Send loop
+
+Pseudokod (z sub_41F2F0):
+
+```
+for pass in 1..N (N = "Times of sending image" z UI, default 1):
+    1. Wyslij INIT packet (opcode 4) z partition table
+    2. precise_sleep(interval_ms)
+    
+    for chunk in firmware:
+        if last chunk and size < 1024:
+            opcode = LAST (2)
+            pad with zeros to 1024 bytes
+        else:
+            opcode = DATA (1)
+        
+        Wyslij packet
+        precise_sleep(interval_ms)
+        
+        if user clicked Stop:
+            break
+    
+    pause 2 * interval_ms  # Inter-pass pause
+```
+
+`precise_sleep` = busy-wait `QueryPerformanceCounter` (sub_41F820).
+
+## 10. INI file format
+
+```ini
+# autogenerated by tools
+# do NOT modify this file
+IMAGE_NAME=firmware.bin
+IMAGE_SIZE=28313600
+PACKAGE_ID=fnt-HGW
+PRODUCT_ID=fnt-HGW
+FIRMWARE_VERSION=0
+PCB_VERSION=0
+FIRMWARE_CRC_SUM=3325216160
+PARTITIONS=CFE,0x00000000-0x0000FFFF,uncover|kernelfs,0x00010000-0x003FFFFF,cover
+INI_CRC_SUM=1234567890
+```
+
+### Pola INI (kolejnosc nieistotna, key=value):
+
+| Klucz | Typ | Opis |
+|---|---|---|
+| `IMAGE_NAME` | string | Nazwa pliku .bin |
+| `IMAGE_SIZE` | uint32 | Rozmiar w bajtach |
+| `PACKAGE_ID` | ASCII | Trafia do header packetu |
+| `PRODUCT_ID` | ASCII | Trafia do header packetu |
+| `FIRMWARE_VERSION` | string | "0" zwykle |
+| `PCB_VERSION` | string | "0" zwykle |
+| `FIRMWARE_CRC_SUM` | uint32 | CRC32 calego .bin (zlib) |
+| `INI_CRC_SUM` | uint32 | CRC32 INI bez tej linii (po `INI_CRC_SUM=`) |
+| `PARTITIONS` | string | format: `name,hex_start-hex_end,cover\|...` |
+
+### PARTITIONS:
+
+```
+PARTITIONS=name1,0xSTART-0xEND,FLAG|name2,...
+```
+- separator: `|` (pipe)
+- FLAG: `cover` lub `uncover`
+- start/end: hex z 0x prefix
+
+### INI_CRC_SUM calculation:
+
+```python
+content_without_crc = "...\nINI_CRC_SUM="
+ini_crc = zlib.crc32(content_without_crc.encode())
+final_content = content_without_crc + str(ini_crc)
+```
+
+## 11. Co router robi (rekonstrukcja)
+
+```
+1. Listener UDP na 13456 + multicast subscribe 224.0.0.119
+2. Recv packet -> sprawdz control_word:
+   - INIT (4): wczytaj partition table do RAM
+   - DATA (1)/LAST (2): zapisz chunk_data w RAM[chunk_counter * 1024]
+3. Po LAST: 
+   - Sprawdz firmware_crc32 = CRC32(received_data)?
+   - Jezeli OK: weryfikuj signature (RSA-2048 - **TYLKO niektore modele**)
+   - Jezeli OK: zapisz na NAND wedlug partition_table
+   - Restart
+4. Wszystkie czeki OK -> green LED (running normally)
+   Czek failed -> czerwony LED (rejection)
+```
+
+**WAZNE**: Niektore routery (WS7200/AX3/Honor R3 z **Hi5651T silicon**) maja **secure boot**:
+- BootROM weryfikuje RSA signature na **kazdym** firmware'rze
+- Klucz publiczny zaszyty w **silicon mask ROM** (nie do zmiany)
+- Software-only recovery dla TYCH modeli = **niemozliwe**
+
+Modele BEZ secure boot (lub z weak boot):
+- E5186 (potwierdzone - Jari Turkia odzyskal cegle)
+- B315/B525 (potwierdzone - 4PDA threads)
+- HG630V2 (potwierdzone - XDA threads)
+- HG633/HG659 (DSL modems - prawdopodobne)
+
+## 12. Roznice miedzy wersjami MUT
+
+| Cecha | HuaweiMUT.exe (389KB) | multicast_upgrade_tool.exe (3.3MB v1.1.0) |
+|---|---|---|
+| Build | 2008-05-15 | nowsze |
+| Compiler | VC6 + MFC | VC10+ MFC |
+| Format firmware | `.bin` raw | `.gz.bin` (gzipped) |
+| Wymaga | nic | **WinRAR** do unpack `.gz.bin` |
+| GUI | basic | rozszerzony |
+| Modele | WS7200/AX3/Honor R3/WS7100 | E5186/B315/B525 LTE |
+| Protokol | identyczny (UDP multicast 224.0.0.119:13456) |||
+
+## 13. Wireshark filter
+
+Aby przechwycic pakiety MUT:
+```
+udp port 13456 and ip dst 224.0.0.119
+```
+
+Lub z source:
+```
+udp port 13456
+```
+
+## 14. Znane bledy MUT (z error messages w EXE)
+
+| Komunikat | Znaczenie |
+|---|---|
+| "Image file CRC error" | CRC32 firmware'u nie zgadza sie z FIRMWARE_CRC_SUM |
+| "Image file length error" | IMAGE_SIZE nie zgadza sie z faktycznym |
+| "Image file name error" | Plik o tej nazwie nie istnieje |
+| "Open image file failed" | I/O error otwarcia .bin |
+| "Ini file CRC" | INI_CRC_SUM nie zgadza sie |
+| "Ini file error" | Brakuje pol w INI lub format zly |
+| "Verify image file failed" | Generic verify error |
+| "Socket error" | bind/sendto blad |
+| "Please select an image file" | Nie wybrano pliku |
+| "Please select partition(s) need to be covered" | Brak zaznaczonych partycji w UI |
+
+## 15. UI flags - Cover partitions
+
+W oryginalnym MUT GUI sa checkboxy "Cover partitions" - pokazuja partycje z INI.
+Domyslnie zaznaczone TYLKO te z `cover` flag w INI.
+User moze zaznaczyc dodatkowe (jak `CFE` ktore mialo `uncover`).
+
+UI flag = bit `flag` w packet INIT - per partition.
+
+## 16. Rekomendacje dla klona Python
+
+1. Bind source port = 13456 (KRYTYCZNE!)
+2. SO_REUSEADDR = 1 (zeby moc bind dwa razy)
+3. SO_BROADCAST = 1 (formality)
+4. IP_MULTICAST_LOOP = 1 (zeby slyszec siebie - przydatne do testow)
+5. IP_MULTICAST_TTL = 0 (NIE zmienaj na > 0!)
+6. IP_MULTICAST_IF = pc_ip (wskaz konkretny adapter)
+7. IP_ADD_MEMBERSHIP = 224.0.0.119 (formality)
+8. precise_sleep(interval_ms) miedzy packetami (busy-wait, NIE time.sleep!)
+9. Domyslny interval = 200ms (lub 5ms z conf.dat - SZALONE szybkie)
+10. Loop forever lub do user stop (nie ma confirmation od routera)

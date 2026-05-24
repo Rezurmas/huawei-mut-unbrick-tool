@@ -1,0 +1,24 @@
+﻿=== PE HEADER ANALYSIS ===
+File size: 389120 bytes
+PE header offset: 0xF0
+Machine: 0x014C (x86 32-bit)
+NumSections: 4
+Timestamp: 1210851767 (2008-05-15 11:42:47)
+
+=== SECTIONS ===
+  .text  VirtAddr=0x00001000 VirtSize=0x0004421D RawPtr=0x00001000 RawSize=0x00045000 Chars=0x60000020
+  .rdata  VirtAddr=0x00046000 VirtSize=0x000109A2 RawPtr=0x00046000 RawSize=0x00011000 Chars=0x40000040
+  .data  VirtAddr=0x00057000 VirtSize=0x00012F48 RawPtr=0x00057000 RawSize=0x00004000 Chars=0xC0000040
+  .rsrc  VirtAddr=0x0006A000 VirtSize=0x00003D60 RawPtr=0x0005B000 RawSize=0x00004000 Chars=0x40000040
+
+=== UPX/Packer detection ===
+  (none found - exe is NOT packed)
+
+=== HARDCODED IP ADDRESSES (ASCII) ===
+  0.0.0.0
+  224.0.0.119
+
+=== Searching for raw uint32 multicast/network constants ===
+  Port 13456 (0x3490 LE) @ offset 0x1F198
+  Port 13456 (0x3490 LE) @ offset 0x1F315
+

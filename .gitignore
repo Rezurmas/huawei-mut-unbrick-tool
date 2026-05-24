@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Tool generated
+_unbrick_log_*.txt
+_unbrick_network_backup.json
+_unbrick_disabled_adapters.json
+_wizard_log_*.txt
+_disabled_adapters.txt
+_network_backup.json
+crash_*.json
+crash_*.log
+
+# Firmware files (zwykle duze, nie commit'uj)
+*.bin
+*.bin.bak
+*.ini.bak
+*.ini.uncover_backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Research artifacts (PDF photos)
+_research/fcc_*.pdf
+_research/native_images/
+_research/fcc_external_photos/
+_research/fcc_internal_photos/
+_research/fcc_test_setup/
+
+# Built executables
+unbrick_tool.exe
+unbrick_tool/
+*.exe
+
+# === HUAWEI COPYRIGHT CONTENT (NIE upload na public!) ===
+WS7200---WS1000-Firmware-Bins-and-Tools-main/
+HuaweiMUT.exe
+multicast_upgrade_tool.exe
+conf.dat
+multicast_restore_default_pack.bin
+
+# Reverse engineering raw dumps z HuaweiMUT.exe (potential copyright)
+_research/mut_strings.txt
+_research/mut_imports.txt
+imports.md
+strings.md
+
+# Duze FCC PDF (publiczne ale niepotrzebne w repo)
+_research/fcc_external_photos.pdf
+_research/fcc_internal_photos.pdf
+_research/fcc_test_setup.pdf
+_research/fcc_test_setup_jnb.pdf
+
+# Utility extract scripts (development only)
+_research/extract_native_images.py
+_research/extract_pdf_images.py

@@ -1,0 +1,36 @@
+﻿=== CHECK 1: MUT.exe command line arguments (CommandLine API hits) ===
+  Found 'GetCommandLineA' @ 0x5500A
+  Found '/?' @ 0x2914
+  Found '-v' @ 0x4BFEB
+  Found '-d' @ 0x4C0D7
+  Found '-h' @ 0x142D3
+
+=== CHECK 2: conf.dat content (raw + check for hidden tokens) ===
+Size: 106 bytes
+Content as text:
+//******conf.dat*****
+//******do not change this file*****
+MULTICAST_IP=224.0.0.119
+INTERVAL_TIME=5ms
+
+Hex dump:
+0000: 2F 2F 2A 2A 2A 2A 2A 2A 63 6F 6E 66 2E 64 61 74   //******conf.dat
+0010: 2A 2A 2A 2A 2A 0D 0A 2F 2F 2A 2A 2A 2A 2A 2A 64   *****..//******d
+0020: 6F 20 6E 6F 74 20 63 68 61 6E 67 65 20 74 68 69   o not change thi
+0030: 73 20 66 69 6C 65 2A 2A 2A 2A 2A 0D 0A 4D 55 4C   s file*****..MUL
+0040: 54 49 43 41 53 54 5F 49 50 3D 32 32 34 2E 30 2E   TICAST_IP=224.0.
+0050: 30 2E 31 31 39 0D 0A 49 4E 54 45 52 56 41 4C 5F   0.119..INTERVAL_
+0060: 54 49 4D 45 3D 35 6D 73 0D 0A                     TIME=5ms..
+
+=== CHECK 3: All MUT.exe socket-related API calls ===
+  connect
+  select
+
+=== CHECK 4: Search MUT.exe for 'TFTP', 'HTTP', 'HiLink', other recovery protocols ===
+  'FTP' @ 0x1AC9C
+  'VRP' @ 0x3E76A
+
+=== CHECK 5: Search MUT.exe for crypto/signature words ===
+  'key' @ 0x47CA6
+  'tls' @ 0x476F7
+

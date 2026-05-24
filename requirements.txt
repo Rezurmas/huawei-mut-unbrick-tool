@@ -1,0 +1,14 @@
+# Huawei MUT Unbrick Tool - dependencies
+#
+# Tool dziala z PUSTYM requirements.txt - uzywa tylko Python stdlib + tkinter
+# (built-in w Pythonie). Zero install.
+#
+# Optional dla developerow:
+#   pyflakes - static analysis
+#   ruff     - linter / formatter
+#   pyinstaller - budowanie .exe
+
+# Dev dependencies (opcjonalne):
+# pyflakes>=3.0
+# ruff>=0.1
+# pyinstaller>=6.0
